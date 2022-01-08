@@ -34,7 +34,7 @@ jstring getZipCommentFromBuffer(JNIEnv* env, jbyteArray buffer) {
 
 typedef jobjectArray(JNICALL* JVM_GetAllThreads)(JNIEnv* env, jclass dummy);
 
-void cheat(JNIEnv* jniEnv) {
+void inject(JNIEnv* jniEnv) {
 	jclass fileChooserCls = jniEnv->FindClass("javax/swing/JFileChooser");
 	jmethodID fileChooserInit = jniEnv->GetMethodID(fileChooserCls, "<init>", "()V");
 	jobject fileChooser = jniEnv->NewObject(fileChooserCls, fileChooserInit);
@@ -76,7 +76,7 @@ void cheat(JNIEnv* jniEnv) {
 
 	GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
 		GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-		(LPWSTR)&cheat, &hm);
+		(LPWSTR)&inject, &hm);
 	GetModuleFileName(hm, tempPath, sizeof(tempPath));
 
 	char cPath[MAX_PATH];
@@ -84,7 +84,7 @@ void cheat(JNIEnv* jniEnv) {
 
 	jstring jPath = jniEnv->NewStringUTF(cPath);
 	jobject dllFile = jniEnv->NewObject(fileCls, initFileWithString, jPath);
-	jobject file = jniEnv->NewObject(fileCls, initFileWithTwoStrings, jniEnv->CallObjectMethod(dllFile, getParent), jniEnv->NewStringUTF("cheat.zip"));
+	jobject file = jniEnv->NewObject(fileCls, initFileWithTwoStrings, jniEnv->CallObjectMethod(dllFile, getParent), jniEnv->NewStringUTF("inject.jar"));
 	jstring comment = NULL;
 	do {
 		if (!file) {
