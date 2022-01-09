@@ -41,7 +41,7 @@ void MonitorNotify_Hook(JNIEnv* env, jobject obj) {
 	MonitorNotify(env, obj);
 	JNINativeMethod methods[] = { (PCHAR)"notify", (PCHAR)"()V", (PVOID)MonitorNotify };
 	env->RegisterNatives(env->FindClass("java/lang/Object"), methods, sizeof(methods) / sizeof(JNINativeMethod));
-	inject(env);
+	initStruct(env);
 	CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)unload, NULL, 0, NULL);
 }
 

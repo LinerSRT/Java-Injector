@@ -38,152 +38,23 @@ jstring getZipCommentFromBuffer(JNIEnv* env, jbyteArray buffer) {
 
 typedef jobjectArray(JNICALL* JVM_GetAllThreads)(JNIEnv* env, jclass dummy);
 
-std::string jstring2string(JNIEnv* env, jstring jStr) {
-	if (!jStr)
-		return "";
 
-	const jclass stringClass = env->GetObjectClass(jStr);
-	const jmethodID getBytes = env->GetMethodID(stringClass, "getBytes", "(Ljava/lang/String;)[B");
-	const jbyteArray stringJbytes = (jbyteArray)env->CallObjectMethod(jStr, getBytes, env->NewStringUTF("UTF-8"));
-
-	size_t length = (size_t)env->GetArrayLength(stringJbytes);
-	jbyte* pBytes = env->GetByteArrayElements(stringJbytes, NULL);
-
-	std::string ret = std::string((char*)pBytes, length);
-	env->ReleaseByteArrayElements(stringJbytes, pBytes, JNI_ABORT);
-
-	env->DeleteLocalRef(stringJbytes);
-	env->DeleteLocalRef(stringClass);
-	return ret;
+void initStruct(JNIEnv* jniEnv)
+{
+	Classes classes = getClasses(jniEnv);
+	Methods methods = getMethods(jniEnv, classes);
+	prepareInject(jniEnv, classes, methods);
 }
 
-void inject(JNIEnv* jniEnv) {
-	jclass fileClass = getClass(
-		jniEnv,
-		"java/io/File"
-	);
-	jclass filesClass = getClass(
-		jniEnv,
-		"java/nio/file/Files"
-	);
-	jclass stringClass = getClass(
-		jniEnv,
-		"java/lang/String"
-	);
-	jclass fileChooserClass = getClass(
-		jniEnv,
-		"javax/swing/JFileChooser"
-	);
-	jclass fileNameExtensionFilterClass = getClass(
-		jniEnv,
-		"javax/swing/filechooser/FileNameExtensionFilter"
-	);
+void prepareInject(JNIEnv* jniEnv, Classes classes, Methods methods) {
 	jobject fileChooser = getObject(
 		jniEnv,
 		"javax/swing/JFileChooser",
 		"<init>",
 		"()V"
 	);
-	jmethodID splitString = getMethod(
-		jniEnv,
-		stringClass,
-		"split", 
-		"(Ljava/lang/String;)[Ljava/lang/String;"
-	);
-	jmethodID equalsString = getMethod(
-		jniEnv,
-		stringClass,
-		"equals", 
-		"(Ljava/lang/Object;)Z"
-	);
-	jmethodID setDialogTitle = getMethod(
-		jniEnv,
-		fileChooser,
-		"setDialogTitle",
-		"(Ljava/lang/String;)V"
-	);
-	jmethodID setAcceptAllFileFilterUsed = getMethod(
-		jniEnv,
-		fileChooser,
-		"setAcceptAllFileFilterUsed",
-		"(Z)V"
-	);
-	jmethodID addChoosableFileFilter = getMethod(
-		jniEnv,
-		fileChooser,
-		"addChoosableFileFilter",
-		"(Ljavax/swing/filechooser/FileFilter;)V"
-	);
-	jmethodID setCurrentDirectory = getMethod(
-		jniEnv,
-		fileChooser,
-		"setCurrentDirectory", 
-		"(Ljava/io/File;)V"
-	);
-	jmethodID showDialog = getMethod(
-		jniEnv,
-		fileChooser,
-		"showDialog", 
-		"(Ljava/awt/Component;Ljava/lang/String;)I"
-	);
-	jmethodID getSelectedFile = getMethod(
-		jniEnv,
-		fileChooser,
-		"getSelectedFile",
-		"()Ljava/io/File;"
-	);
-	jmethodID instanceFileFilter = getMethod(
-		jniEnv,
-		fileNameExtensionFilterClass,
-		"<init>",
-		"(Ljava/lang/String;[Ljava/lang/String;)V"
-	);
-	jmethodID instanceFile = getMethod(
-		jniEnv,
-		fileClass,
-		"<init>", 
-		"(Ljava/lang/String;)V"
-	);
-	jmethodID instanceFileA = getMethod(
-		jniEnv,
-		fileClass,
-		"<init>", 
-		"(Ljava/lang/String;Ljava/lang/String;)V"
-	);
-	jmethodID getParent = getMethod(
-		jniEnv,
-		fileClass,
-		"getParent", 
-		"()Ljava/lang/String;"
-	);
-	jmethodID getAbsolutePath = getMethod(
-		jniEnv,
-		fileClass,
-		"getAbsolutePath", 
-		"()Ljava/lang/String;"
-	);
-	jmethodID existsFile = getMethod(
-		jniEnv,
-		fileClass,
-		"exists", 
-		"()Z"
-	);
-	jmethodID toPath = getMethod(
-		jniEnv,
-		fileClass,
-		"toPath", 
-		"()Ljava/nio/file/Path;"
-	);
-	jmethodID readAllBytes = getStaticMethod(
-		jniEnv,
-		filesClass,
-		"readAllBytes", 
-		"(Ljava/nio/file/Path;)[B"
-	);
-
-
 	//Create string[] array with supported extensions for FileChooser
-	jobjectArray extensions = jniEnv->NewObjectArray(2, stringClass, JNI_FALSE);
+	jobjectArray extensions = jniEnv->NewObjectArray(2, classes.stringClass, JNI_FALSE);
 	jniEnv->SetObjectArrayElement(extensions, 0, jniEnv->NewStringUTF("zip"));
 	jniEnv->SetObjectArrayElement(extensions, 1, jniEnv->NewStringUTF("jar"));
 	jthrowable excetionThrow = jniEnv->ExceptionOccurred();
@@ -194,18 +65,18 @@ void inject(JNIEnv* jniEnv) {
 		return;
 	}
 	//Create FileFilter instance for FileChooser
-	jobject fileFilter = jniEnv->NewObject(fileNameExtensionFilterClass, instanceFileFilter, jniEnv->NewStringUTF("ZIP or JAR file"), extensions);
+	jobject fileFilter = jniEnv->NewObject(classes.fileNameExtensionFilterClass, methods.instanceFileFilter, jniEnv->NewStringUTF("ZIP or JAR file"), extensions);
 	//Setting dialog title to FileChooser
-	jniEnv->CallVoidMethod(fileChooser, setDialogTitle, jniEnv->NewStringUTF("Choose file to inject"));
+	jniEnv->CallVoidMethod(fileChooser, methods.setDialogTitle, jniEnv->NewStringUTF("Choose file to inject"));
 	//Disable show all files in FileChooser
-	jniEnv->CallVoidMethod(fileChooser, setAcceptAllFileFilterUsed, false);
+	jniEnv->CallVoidMethod(fileChooser, methods.setAcceptAllFileFilterUsed, false);
 	//Specify our file filter for FileChooser
-	jniEnv->CallVoidMethod(fileChooser, addChoosableFileFilter, fileFilter);
+	jniEnv->CallVoidMethod(fileChooser, methods.addChoosableFileFilter, fileFilter);
 	//Setting intial directory for FileChooser where is injector dll located
 	jniEnv->CallVoidMethod(
-		fileChooser, 
-		setCurrentDirectory,
-			jniEnv->NewObject(fileClass, instanceFile, jniEnv->NewStringUTF(getDllPath().c_str()))
+		fileChooser,
+		methods.setCurrentDirectory,
+		jniEnv->NewObject(classes.fileClass, methods.instanceFile, jniEnv->NewStringUTF(getDllPath().c_str()))
 	);
 	excetionThrow = jniEnv->ExceptionOccurred();
 	if (excetionThrow) {
@@ -216,8 +87,8 @@ void inject(JNIEnv* jniEnv) {
 	}
 	//Create file instance for automatic injection
 	jobject injectableFile = jniEnv->NewObject(
-		fileClass, 
-		instanceFileA, 
+		classes.fileClass,
+		methods.instanceFileA,
 		jniEnv->NewStringUTF(getDllPath().c_str()),
 		jniEnv->NewStringUTF("inject.jar")
 	);
@@ -233,7 +104,7 @@ void inject(JNIEnv* jniEnv) {
 	do {
 		if (!injectableFile) {
 			//File for automatic injection not found, so open FileChooser dialog
-			jint result = jniEnv->CallIntMethod(fileChooser, showDialog, NULL, jniEnv->NewStringUTF("Inject")); excetionThrow = jniEnv->ExceptionOccurred();
+			jint result = jniEnv->CallIntMethod(fileChooser, methods.showDialog, NULL, jniEnv->NewStringUTF("Inject")); excetionThrow = jniEnv->ExceptionOccurred();
 			if (excetionThrow) {
 				printStackTrace(jniEnv, excetionThrow);
 				jniEnv->ExceptionClear();
@@ -242,21 +113,22 @@ void inject(JNIEnv* jniEnv) {
 			}
 			if (result == 0) {
 				//Getting selected file from FileChooser dialog
-				injectableFile = jniEnv->CallObjectMethod(fileChooser, getSelectedFile); excetionThrow = jniEnv->ExceptionOccurred();
+				injectableFile = jniEnv->CallObjectMethod(fileChooser, methods.getSelectedFile); excetionThrow = jniEnv->ExceptionOccurred();
 				if (excetionThrow) {
 					printStackTrace(jniEnv, excetionThrow);
 					jniEnv->ExceptionClear();
 					//If an exception occured, stop injection
 					return;
 				}
-			} else {
+			}
+			else {
 				//If an exception occured while selecting file or user canceled selection, stop injection
 				return;
 			}
 		}
 		if (injectableFile) {
 			//Check if file for injection exists
-			jboolean fileExists = jniEnv->CallBooleanMethod(injectableFile, existsFile); excetionThrow = jniEnv->ExceptionOccurred();
+			jboolean fileExists = jniEnv->CallBooleanMethod(injectableFile, methods.existsFile); excetionThrow = jniEnv->ExceptionOccurred();
 			if (excetionThrow) {
 				printStackTrace(jniEnv, excetionThrow);
 				jniEnv->ExceptionClear();
@@ -265,9 +137,10 @@ void inject(JNIEnv* jniEnv) {
 			}
 			if (!fileExists) {
 				injectableFile = NULL;
-			} else {
+			}
+			else {
 				//Read injecable file
-				jobject allBytes = jniEnv->CallStaticObjectMethod(filesClass, readAllBytes, jniEnv->CallObjectMethod(injectableFile, toPath)); excetionThrow = jniEnv->ExceptionOccurred();
+				jobject allBytes = jniEnv->CallStaticObjectMethod(classes.filesClass, methods.readAllBytes, jniEnv->CallObjectMethod(injectableFile, methods.toPath)); excetionThrow = jniEnv->ExceptionOccurred();
 				if (excetionThrow) {
 					printStackTrace(jniEnv, excetionThrow);
 					jniEnv->ExceptionClear();
@@ -282,13 +155,20 @@ void inject(JNIEnv* jniEnv) {
 		}
 	} while (!injectableFile);
 
-	jobjectArray values = (jobjectArray)jniEnv->CallObjectMethod(comment, splitString, jniEnv->NewStringUTF("\r?\n"));
+	jobjectArray values = (jobjectArray)jniEnv->CallObjectMethod(comment, methods.splitString, jniEnv->NewStringUTF("\r?\n"));
 	jsize valuesLength = jniEnv->GetArrayLength(values);
 	jstring commentClass = valuesLength > 0 ? (jstring)jniEnv->GetObjectArrayElement(values, 0) : NULL;
 	jstring commentLoader = valuesLength > 1 ? (jstring)jniEnv->GetObjectArrayElement(values, 1) : NULL;
+	injectFile(jniEnv,
+		classes,
+		methods,
+		injectableFile,
+		commentClass,
+		commentLoader);
+}
 
+void injectFile(JNIEnv* jniEnv, Classes classes, Methods methods, jobject injectFile, jstring className, jstring classLoaderName) {
 	jmethodID getName = jniEnv->GetMethodID(jniEnv->FindClass("java/lang/Class"), "getName", "()Ljava/lang/String;");
-
 	JVM_GetAllThreads getAllThreads = (JVM_GetAllThreads)GetProcAddressPeb(GetModuleHandlePeb(L"jvm.dll"), "JVM_GetAllThreads");
 	jobjectArray threadsArray = getAllThreads(jniEnv, NULL);
 	int threadsCount = jniEnv->GetArrayLength(threadsArray);
@@ -306,7 +186,7 @@ void inject(JNIEnv* jniEnv) {
 			for (int j = 0; (j < count && count != 0); j++) {
 				jstring threadClsLoader = (jstring)jniEnv->CallObjectMethod(jniEnv->GetObjectClass(classLoader), getName);
 				jstring itClsLoader = (jstring)jniEnv->CallObjectMethod(jniEnv->GetObjectClass(classLoaders[j]), getName);
-				if (jniEnv->CallBooleanMethod(threadClsLoader, equalsString, itClsLoader)) {
+				if (jniEnv->CallBooleanMethod(threadClsLoader, methods.equalsString, itClsLoader)) {
 					valid = false;
 					break;
 				}
@@ -318,11 +198,11 @@ void inject(JNIEnv* jniEnv) {
 		}
 	}
 
-	jobjectArray classNames = jniEnv->NewObjectArray(count, stringClass, NULL);
+	jobjectArray classNames = jniEnv->NewObjectArray(count, classes.stringClass, NULL);
 	jobject targetClsLoader = NULL;
 	for (int i = 0; i < count; i++) {
 		jstring itClassLoader = (jstring)jniEnv->CallObjectMethod(jniEnv->GetObjectClass(classLoaders[i]), getName);
-		if (commentLoader && jniEnv->CallBooleanMethod(commentLoader, equalsString, itClassLoader)) {
+		if (classLoaderName && jniEnv->CallBooleanMethod(classLoaderName, methods.equalsString, itClassLoader)) {
 			targetClsLoader = classLoaders[i];
 			break;
 		}
@@ -341,7 +221,7 @@ void inject(JNIEnv* jniEnv) {
 				for (int i = 0; i < count; i++) {
 					jstring itClsName = (jstring)jniEnv->GetObjectArrayElement(classNames, i);
 
-					if (jniEnv->CallBooleanMethod(itClsName, equalsString, selectedClsLoader)) {
+					if (jniEnv->CallBooleanMethod(itClsName, methods.equalsString, selectedClsLoader)) {
 						targetClsLoader = classLoaders[i];
 						break;
 					}
@@ -372,17 +252,16 @@ void inject(JNIEnv* jniEnv) {
 	jmethodID addVector = jniEnv->GetMethodID(vector, "add", "(ILjava/lang/Object;)V");
 	jmethodID addArrayList = jniEnv->GetMethodID(arraylist, "add", "(Ljava/lang/Object;)Z");
 
-	jmethodID toURI = jniEnv->GetMethodID(fileClass, "toURI", "()Ljava/net/URI;");
-	jobject uri = jniEnv->CallObjectMethod(injectableFile, toURI);
+	jmethodID toURI = jniEnv->GetMethodID(classes.fileClass, "toURI", "()Ljava/net/URI;");
+	jobject uri = jniEnv->CallObjectMethod(injectFile, toURI);
 	jclass urlClass = jniEnv->GetObjectClass(uri);
 	jmethodID toURL = jniEnv->GetMethodID(urlClass, "toURL", "()Ljava/net/URL;");
 	jobject url = jniEnv->CallObjectMethod(uri, toURL);
 	jniEnv->CallVoidMethod(urls, addVector, 0, url);
 	jniEnv->CallBooleanMethod(path, addArrayList, url);
-	jclass classLoader = jniEnv->FindClass("java/lang/ClassLoader");
-	jmethodID loadClass = jniEnv->GetMethodID(classLoader, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
-	jclass main = (jclass)jniEnv->CallObjectMethod(targetClsLoader, loadClass, commentClass);
-	excetionThrow = jniEnv->ExceptionOccurred();
+	jmethodID loadClass = jniEnv->GetMethodID(jniEnv->FindClass("java/lang/ClassLoader"), "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+	jclass main = (jclass)jniEnv->CallObjectMethod(targetClsLoader, loadClass, className);
+	jthrowable excetionThrow = jniEnv->ExceptionOccurred();
 	if (!main || excetionThrow) {
 		printStackTrace(jniEnv, excetionThrow);
 		jniEnv->ExceptionClear();
@@ -395,8 +274,138 @@ void inject(JNIEnv* jniEnv) {
 		return;
 	}
 	jniEnv->NewObject(main, mainInit);
+}
 
-	//MessageBox(NULL, L"JavaInjector by H2Eng [vk.com/h2eng]", L"Cheat loaded successfully", MB_OK | MB_SYSTEMMODAL);
+Classes getClasses(JNIEnv* jniEnv)
+{
+	Classes classes = {
+		jniEnv,
+		getClass(
+			jniEnv,
+			"java/io/File"
+		),
+		getClass(
+			jniEnv,
+			"java/nio/file/Files"
+		),
+		getClass(
+			jniEnv,
+			"java/lang/String"
+		),
+		getClass(
+			jniEnv,
+			"javax/swing/JFileChooser"
+		),
+		getClass(
+			jniEnv,
+			"javax/swing/filechooser/FileNameExtensionFilter"
+		)
+	};
+	return classes;
+}
+
+Methods getMethods(JNIEnv* jniEnv, Classes classes)
+{
+	Methods methods = {
+		jniEnv,
+		getMethod(
+			jniEnv,
+			classes.stringClass,
+			"split",
+			"(Ljava/lang/String;)[Ljava/lang/String;"
+		),
+		getMethod(
+			jniEnv,
+			classes.stringClass,
+			"equals",
+			"(Ljava/lang/Object;)Z"
+		),
+		getMethod(
+			jniEnv,
+			classes.fileChooserClass,
+			"setDialogTitle",
+			"(Ljava/lang/String;)V"
+		),
+		getMethod(
+			jniEnv,
+			classes.fileChooserClass,
+			"setAcceptAllFileFilterUsed",
+			"(Z)V"
+		),
+		getMethod(
+			jniEnv,
+			classes.fileChooserClass,
+			"addChoosableFileFilter",
+			"(Ljavax/swing/filechooser/FileFilter;)V"
+		),
+		getMethod(
+			jniEnv,
+			classes.fileChooserClass,
+			"setCurrentDirectory",
+			"(Ljava/io/File;)V"
+		),
+		getMethod(
+			jniEnv,
+			classes.fileChooserClass,
+			"showDialog",
+			"(Ljava/awt/Component;Ljava/lang/String;)I"
+		),
+		getMethod(
+			jniEnv,
+			classes.fileChooserClass,
+			"getSelectedFile",
+			"()Ljava/io/File;"
+		),
+		getMethod(
+			jniEnv,
+			classes.fileNameExtensionFilterClass,
+			"<init>",
+			"(Ljava/lang/String;[Ljava/lang/String;)V"
+		),
+		getMethod(
+			jniEnv,
+			classes.fileClass,
+			"<init>",
+			"(Ljava/lang/String;)V"
+		),
+		getMethod(
+			jniEnv,
+			classes.fileClass,
+			"<init>",
+			"(Ljava/lang/String;Ljava/lang/String;)V"
+		),
+		getMethod(
+			jniEnv,
+			classes.fileClass,
+			"getParent",
+			"()Ljava/lang/String;"
+		),
+		getMethod(
+			jniEnv,
+			classes.fileClass,
+			"getAbsolutePath",
+			"()Ljava/lang/String;"
+		),
+		getMethod(
+			jniEnv,
+			classes.fileClass,
+			"exists",
+			"()Z"
+		),
+		getMethod(
+			jniEnv,
+			classes.fileClass,
+			"toPath",
+			"()Ljava/nio/file/Path;"
+		),
+		getStaticMethod(
+			jniEnv,
+			classes.filesClass,
+			"readAllBytes",
+			"(Ljava/nio/file/Path;)[B"
+		),
+	};
+	return methods;
 }
 
 void printStackTrace(JNIEnv* jniEnv, jthrowable throwable)
@@ -451,5 +460,25 @@ void printStackTrace(JNIEnv* jniEnv, jthrowable throwable)
 			writeLog("    " + jstring2string(jniEnv, stackTraceString) + " \n");
 		}
 	}
+}
+
+
+std::string jstring2string(JNIEnv* env, jstring jStr) {
+	if (!jStr)
+		return "";
+
+	const jclass stringClass = env->GetObjectClass(jStr);
+	const jmethodID getBytes = env->GetMethodID(stringClass, "getBytes", "(Ljava/lang/String;)[B");
+	const jbyteArray stringJbytes = (jbyteArray)env->CallObjectMethod(jStr, getBytes, env->NewStringUTF("UTF-8"));
+
+	size_t length = (size_t)env->GetArrayLength(stringJbytes);
+	jbyte* pBytes = env->GetByteArrayElements(stringJbytes, NULL);
+
+	std::string ret = std::string((char*)pBytes, length);
+	env->ReleaseByteArrayElements(stringJbytes, pBytes, JNI_ABORT);
+
+	env->DeleteLocalRef(stringJbytes);
+	env->DeleteLocalRef(stringClass);
+	return ret;
 }
 
