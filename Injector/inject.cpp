@@ -1,10 +1,10 @@
 #include "pch.h"
 #include <windows.h>
-#include "utils.h"
 #include <stdlib.h>  
+#include <iostream>
+#include "utils.h"
 #include "jni.h"
 #include "Java.h"
-#include <iostream>
 #include "Logger.h"
 #include "inject.h"
 #pragma warning(disable:4996)
@@ -167,8 +167,8 @@ void prepareInject(JNIEnv* jniEnv, Classes classes, Methods methods) {
 		commentLoader);
 }
 
-void injectFile(JNIEnv* jniEnv, Classes classes, Methods methods, jobject injectFile, jstring className, jstring classLoaderName) {
-	jmethodID getName = jniEnv->GetMethodID(jniEnv->FindClass("java/lang/Class"), "getName", "()Ljava/lang/String;");
+jobject getTargetClassLoader(JNIEnv* jniEnv, Classes classes, Methods methods, jstring classLoaderName) {
+	jobject targetClassLoader = NULL;
 	JVM_GetAllThreads getAllThreads = (JVM_GetAllThreads)GetProcAddressPeb(GetModuleHandlePeb(L"jvm.dll"), "JVM_GetAllThreads");
 	jobjectArray threadsArray = getAllThreads(jniEnv, NULL);
 	int threadsCount = jniEnv->GetArrayLength(threadsArray);
@@ -177,15 +177,14 @@ void injectFile(JNIEnv* jniEnv, Classes classes, Methods methods, jobject inject
 	int count = 0;
 	for (int i = 0; i < threadsCount; i++) {
 		jobject thread = jniEnv->GetObjectArrayElement(threadsArray, i);
-		jclass threadCls = jniEnv->FindClass("java/lang/Thread");
-		jfieldID ctxClsLoader = jniEnv->GetFieldID(threadCls, "contextClassLoader", "Ljava/lang/ClassLoader;");
+		jfieldID ctxClsLoader = jniEnv->GetFieldID(classes.threadClass, "contextClassLoader", "Ljava/lang/ClassLoader;");
 		jobject classLoader = jniEnv->GetObjectField(thread, ctxClsLoader);
 		if (classLoader) {
 			bool valid = true;
 
 			for (int j = 0; (j < count && count != 0); j++) {
-				jstring threadClsLoader = (jstring)jniEnv->CallObjectMethod(jniEnv->GetObjectClass(classLoader), getName);
-				jstring itClsLoader = (jstring)jniEnv->CallObjectMethod(jniEnv->GetObjectClass(classLoaders[j]), getName);
+				jstring threadClsLoader = (jstring)jniEnv->CallObjectMethod(jniEnv->GetObjectClass(classLoader), methods.getName);
+				jstring itClsLoader = (jstring)jniEnv->CallObjectMethod(jniEnv->GetObjectClass(classLoaders[j]), methods.getName);
 				if (jniEnv->CallBooleanMethod(threadClsLoader, methods.equalsString, itClsLoader)) {
 					valid = false;
 					break;
@@ -199,17 +198,15 @@ void injectFile(JNIEnv* jniEnv, Classes classes, Methods methods, jobject inject
 	}
 
 	jobjectArray classNames = jniEnv->NewObjectArray(count, classes.stringClass, NULL);
-	jobject targetClsLoader = NULL;
 	for (int i = 0; i < count; i++) {
-		jstring itClassLoader = (jstring)jniEnv->CallObjectMethod(jniEnv->GetObjectClass(classLoaders[i]), getName);
+		jstring itClassLoader = (jstring)jniEnv->CallObjectMethod(jniEnv->GetObjectClass(classLoaders[i]), methods.getName);
 		if (classLoaderName && jniEnv->CallBooleanMethod(classLoaderName, methods.equalsString, itClassLoader)) {
-			targetClsLoader = classLoaders[i];
+			targetClassLoader = classLoaders[i];
 			break;
 		}
 		jniEnv->SetObjectArrayElement(classNames, i, itClassLoader);
 	}
-
-	if (!targetClsLoader) {
+	if (!targetClassLoader) {
 		jclass JOptionPane = jniEnv->FindClass("javax/swing/JOptionPane");
 		jmethodID showInputDialog = jniEnv->GetStaticMethodID(JOptionPane, "showInputDialog", "(Ljava/awt/Component;Ljava/lang/Object;Ljava/lang/String;ILjavax/swing/Icon;[Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
 		jstring title = jniEnv->NewStringUTF("Choose class loader");
@@ -222,7 +219,7 @@ void injectFile(JNIEnv* jniEnv, Classes classes, Methods methods, jobject inject
 					jstring itClsName = (jstring)jniEnv->GetObjectArrayElement(classNames, i);
 
 					if (jniEnv->CallBooleanMethod(itClsName, methods.equalsString, selectedClsLoader)) {
-						targetClsLoader = classLoaders[i];
+						targetClassLoader = classLoaders[i];
 						break;
 					}
 				}
@@ -230,38 +227,28 @@ void injectFile(JNIEnv* jniEnv, Classes classes, Methods methods, jobject inject
 				break;
 			}
 			else {
-				return;
+				return targetClassLoader;
 			}
 		} while (true);
 	}
 
 	delete[] classLoaders;
+	return targetClassLoader;
+}
 
-	jclass urlClassLoaderCls = jniEnv->FindClass("java/net/URLClassLoader");
-	jfieldID ucp = jniEnv->GetFieldID(urlClassLoaderCls, "ucp", "Lsun/misc/URLClassPath;");
-	jobject ucpObject = jniEnv->GetObjectField(targetClsLoader, ucp);
-	jclass urlClassPath = jniEnv->GetObjectClass(ucpObject);
-	jfieldID urlsField = jniEnv->GetFieldID(urlClassPath, "urls", "Ljava/util/Stack;");
-	jfieldID pathField = jniEnv->GetFieldID(urlClassPath, "path", "Ljava/util/ArrayList;");
-
-	jobject urls = jniEnv->GetObjectField(ucpObject, urlsField);
-	jobject path = jniEnv->GetObjectField(ucpObject, pathField);
-	jclass stack = jniEnv->GetObjectClass(urls);
-	jclass vector = jniEnv->GetSuperclass(stack);
-	jclass arraylist = jniEnv->GetObjectClass(path);
-	jmethodID addVector = jniEnv->GetMethodID(vector, "add", "(ILjava/lang/Object;)V");
-	jmethodID addArrayList = jniEnv->GetMethodID(arraylist, "add", "(Ljava/lang/Object;)Z");
-
-	jmethodID toURI = jniEnv->GetMethodID(classes.fileClass, "toURI", "()Ljava/net/URI;");
-	jobject uri = jniEnv->CallObjectMethod(injectFile, toURI);
-	jclass urlClass = jniEnv->GetObjectClass(uri);
-	jmethodID toURL = jniEnv->GetMethodID(urlClass, "toURL", "()Ljava/net/URL;");
-	jobject url = jniEnv->CallObjectMethod(uri, toURL);
-	jniEnv->CallVoidMethod(urls, addVector, 0, url);
-	jniEnv->CallBooleanMethod(path, addArrayList, url);
-	jmethodID loadClass = jniEnv->GetMethodID(jniEnv->FindClass("java/lang/ClassLoader"), "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
-	jclass main = (jclass)jniEnv->CallObjectMethod(targetClsLoader, loadClass, className);
+void injectFile(JNIEnv* jniEnv, Classes classes, Methods methods, jobject injectFile, jstring className, jstring classLoaderName) {
+	jobject targetClsLoader = getTargetClassLoader(jniEnv, classes, methods, classLoaderName);
 	jthrowable excetionThrow = jniEnv->ExceptionOccurred();
+	jobject uri = jniEnv->CallObjectMethod(injectFile, methods.toURI);
+	jobject url = jniEnv->CallObjectMethod(uri, methods.toURL);
+	jniEnv->CallVoidMethod(targetClsLoader, methods.addURL, url);
+	if (excetionThrow) {
+		printStackTrace(jniEnv, excetionThrow);
+		jniEnv->ExceptionClear();
+		return;
+	}
+	jclass main = (jclass)jniEnv->CallObjectMethod(targetClsLoader, methods.loadClass, className);
+	excetionThrow = jniEnv->ExceptionOccurred();
 	if (!main || excetionThrow) {
 		printStackTrace(jniEnv, excetionThrow);
 		jniEnv->ExceptionClear();
@@ -270,7 +257,6 @@ void injectFile(JNIEnv* jniEnv, Classes classes, Methods methods, jobject inject
 	jmethodID mainInit = jniEnv->GetMethodID(main, "<init>", "()V");
 	if (!mainInit || jniEnv->ExceptionCheck()) {
 		jniEnv->ExceptionClear();
-		//MessageBox(NULL, L"Init constructor not found.", L"Error", MB_OK);
 		return;
 	}
 	jniEnv->NewObject(main, mainInit);
@@ -299,6 +285,30 @@ Classes getClasses(JNIEnv* jniEnv)
 		getClass(
 			jniEnv,
 			"javax/swing/filechooser/FileNameExtensionFilter"
+		),
+		getClass(
+			jniEnv,
+			"java/lang/Class"
+		),
+		getClass(
+			jniEnv,
+			"java/lang/Thread"
+		),
+		getClass(
+			jniEnv,
+			"java/net/URLClassLoader"
+		),
+		getClass(
+			jniEnv,
+			"java/lang/ClassLoader"
+		),
+		getClass(
+			jniEnv,
+			"java/net/URI"
+		),
+		getClass(
+			jniEnv,
+			"java/net/URL"
 		)
 	};
 	return classes;
@@ -404,6 +414,36 @@ Methods getMethods(JNIEnv* jniEnv, Classes classes)
 			"readAllBytes",
 			"(Ljava/nio/file/Path;)[B"
 		),
+		getMethod(
+			jniEnv,
+			classes.classClass,
+			"getName", "()Ljava/lang/String;"
+		),
+		getMethod(
+			jniEnv,
+			classes.fileClass,
+			"toURI", "()Ljava/net/URI;"
+		),
+		getMethod(
+			jniEnv,
+			classes.uriClass,
+			"toURL", "()Ljava/net/URL;"
+		),
+		getMethod(
+			jniEnv,
+			classes.urlClass,
+			"toString", "()Ljava/lang/String;"
+		),
+		getMethod(
+			jniEnv,
+			classes.urlClassLoader,
+			"addURL", "(Ljava/net/URL;)V"
+		),
+		getMethod(
+			jniEnv,
+			classes.classLoader,
+			"loadClass", "(Ljava/lang/String;)Ljava/lang/Class;"
+		)
 	};
 	return methods;
 }
