@@ -2,11 +2,15 @@
 #include <windows.h>
 #include <winternl.h>
 #include <psapi.h>
+#include "jni.h"
+#include <stdio.h>
+#include <string>
+using namespace std;
 
 size_t wlindexof(const wchar_t* str, size_t len, wchar_t c);
 HMODULE GetModuleHandlePeb(LPCWSTR name);
 PVOID GetProcAddressPeb(HMODULE hModule, LPCSTR name);
-
+string getDllPath();
 namespace NTDEFINES {
 	// For the old SDK support:
 #if (_WIN32_WINNT <= 0x0603)

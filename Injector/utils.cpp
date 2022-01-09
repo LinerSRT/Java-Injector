@@ -1,6 +1,9 @@
 #include "pch.h"
 #include "utils.h"
 #include <windows.h>
+#include <string>
+#include <iostream>
+
 
 size_t wlindexof(const wchar_t* str, size_t len, wchar_t c) {
 	for (size_t i = len - 1; i != (size_t)(-1); --i) {
@@ -56,3 +59,22 @@ PVOID GetProcAddressPeb(HMODULE hModule, LPCSTR name) {
 
 	return NULL;
 }
+
+string getDllPath()
+{
+	char path[MAX_PATH];
+	HMODULE hm = NULL;
+
+	if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+		GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+		(LPCSTR)&getDllPath,
+		&hm))
+	{
+		int ret = GetLastError();
+	}
+	GetModuleFileNameA(hm, path, sizeof(path));
+	string ret_path = path;
+	return ret_path.substr(0, ret_path.find_last_of("\\") + 1);
+}
+
+

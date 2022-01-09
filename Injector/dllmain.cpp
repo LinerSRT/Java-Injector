@@ -6,6 +6,25 @@
 #include <iostream>
 #include <HookLib.h>
 
+
+void createConsole()
+{
+
+
+
+
+	//if (!AllocConsole()) {
+	//	return;
+	//}
+	//FILE* fpstdin = stdin, * fpstdout = stdout, * fpstderr = stderr;
+	//freopen_s(&fpstdin, "CONIN$", "r", stdin);
+	//freopen_s(&fpstdout, "CONOUT$", "w", stdout);
+	//freopen_s(&fpstderr, "CONOUT$", "w", stderr);
+	//SetConsoleTitleA("L-Mod | Log Window");
+	//std::cout << "[Info] Initializing L-Mod \n";
+	//std::cout << getDllPath();
+}
+
 PVOID unload(PVOID arg) {
 	HMODULE hm = NULL;
 	GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -40,7 +59,6 @@ jstring GetSystemPackage_Hook(JNIEnv* env, jstring name) {
 }
 
 
-
 PVOID WINAPI hookThread(PVOID arg) {
 	HMODULE jvm = GetModuleHandlePeb(L"jvm.dll");
 	MonitorNotify = (JVM_MonitorNotify)GetProcAddressPeb(jvm, "JVM_MonitorNotify");
@@ -55,6 +73,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved) {
 	switch (dwReason)
 	{
 	case DLL_PROCESS_ATTACH:
+		createConsole();
+
+
 		CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)hookThread, NULL, 0, NULL);
 		break;
 	}
